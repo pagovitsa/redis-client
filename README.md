@@ -216,7 +216,7 @@ This demonstrates all major features of the client.
 
 ## License
 
-ISC
+MIT
 
 ## Contributing
 

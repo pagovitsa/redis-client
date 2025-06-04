@@ -27,7 +27,7 @@
     "nodejs",
     "database"
   ],
-  "author": "pagovitsa <pagovitsa@github.com>",
+  "author": "bcoders.gr <info@bcoders.gr>",
   "license": "MIT",
   "description": "Enhanced Redis client with built-in compression, performance monitoring, and keyspace event subscriptions. Self-contained implementation without external dependencies.",
   "repository": {
