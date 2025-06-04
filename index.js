@@ -376,6 +376,30 @@ class RedisClient extends EventEmitter {
         }
     }
 
+    /**
+     * Get a complete snapshot of all keys and values from a Redis namespace
+     * @param {string} namespace - The namespace to retrieve (e.g., 'pair', 'block')
+     * @param {number} batchSize - Batch size for bulk operations (default: 100)
+     * @returns {Promise<Object>} - Object containing all key-value pairs from the namespace
+     */
+    async getNamespaceSnapshot(namespace, batchSize = 100) {
+        try {
+            // Get all keys in the namespace
+            const keys = await this.getNamespace(namespace);
+            
+            // Extract clean keys (remove namespace prefix)
+            const cleanKeys = keys.map(key => key.replace(`${namespace}:`, ''));
+            
+            // Use the Redis client's optimized bulk batched operation
+            const values = await this.getBulkBatched(namespace, cleanKeys, batchSize);
+            
+            return values;
+        } catch (error) {
+            console.error(`[${this.alias}] Error getting namespace snapshot:`, error);
+            throw error;
+        }
+    }
+
     // KEY OPERATIONS
     
     async setKey(namespace, key, value, expirationInSeconds) {

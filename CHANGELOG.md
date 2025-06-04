@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2025-06-04
+
+### Added
+- **getNamespaceSnapshot()**: New method that provides a complete snapshot of all keys and values from a Redis namespace
+- **Optimized Bulk Operations**: getNamespaceSnapshot leverages existing getBulkBatched operations for efficient data retrieval
+- **Clean API**: Returns a clean object with namespace prefix removed from keys for easier data processing
+
+### Features
+- Automatically retrieves all keys from specified namespace using getNamespace()
+- Removes namespace prefix from keys for cleaner result structure
+- Uses optimized bulk batched operations for high performance
+- Supports custom batch size parameter (default: 100)
+- Comprehensive error handling with detailed logging
+
+### Usage
+```javascript
+// Get all pairs from 'pair' namespace
+const pairData = await client.getNamespaceSnapshot('pair');
+
+// Custom batch size for large datasets
+const blockData = await client.getNamespaceSnapshot('block', 200);
+```
+
 ## [1.2.1] - 2025-06-04
 
 ### Fixed
