@@ -7,13 +7,68 @@ import zlib from 'zlib';
  * Self-contained implementation without external dependencies
  */
 class RedisClient extends EventEmitter {
-    constructor(alias = 'default', remote = false) {
+    constructor(alias = 'default', connectionOptions = {}, username = 'root', password = 'root') {
         super();
         this.alias = alias;
-        this.socketPath = remote
-            ? '/media/redis/remote.sock'
-            : '/media/redis/local.sock';
-        this.remote = !!remote;
+        
+        // Handle different connection options
+        if (typeof connectionOptions === 'boolean') {
+            // Legacy support: remote = true/false
+            this.socketPath = connectionOptions
+                ? '/media/redis/remote.sock'
+                : '/media/redis/local.sock';
+            this.connectionConfig = {
+                socket: { path: this.socketPath },
+                username: username,
+                password: password
+            };
+        } else if (typeof connectionOptions === 'string') {
+            // String can be either socket path or IP:port
+            if (connectionOptions.includes('/') || connectionOptions.includes('.sock')) {
+                // Socket path
+                this.socketPath = connectionOptions;
+                this.connectionConfig = {
+                    socket: { path: this.socketPath },
+                    username: username,
+                    password: password
+                };
+            } else {
+                // IP address or hostname (with optional port)
+                const [host, port = 6379] = connectionOptions.split(':');
+                this.connectionConfig = {
+                    socket: { 
+                        host: host,
+                        port: parseInt(port)
+                    },
+                    username: username,
+                    password: password
+                };
+            }
+        } else if (typeof connectionOptions === 'object' && connectionOptions !== null) {
+            // Full configuration object
+            this.connectionConfig = {
+                socket: connectionOptions.socket || { 
+                    host: connectionOptions.host || 'localhost',
+                    port: connectionOptions.port || 6379,
+                    path: connectionOptions.path
+                },
+                username: connectionOptions.username || username,
+                password: connectionOptions.password || password,
+                ...connectionOptions
+            };
+            if (connectionOptions.path) {
+                this.socketPath = connectionOptions.path;
+            }
+        } else {
+            // Default local socket
+            this.socketPath = '/media/redis/local.sock';
+            this.connectionConfig = {
+                socket: { path: this.socketPath },
+                username: username,
+                password: password
+            };
+        }
+        
         this.client = null;
         this.subClient = null;
         this.subscribedNamespaces = new Set();
@@ -107,11 +162,7 @@ class RedisClient extends EventEmitter {
     
     async _initializeRedisClient() {
         console.log(`[${this.alias}] Initializing Redis client...`);
-        this.client = createClient({
-            socket: { path: this.socketPath },
-            username: 'root',
-            password: 'root',
-        });
+        this.client = createClient(this.connectionConfig);
         this.client.on('error', (err) => console.error(`[${this.alias}] Redis error:`, err));
         this.client.on('ready', () => console.log(`[${this.alias}] Redis connected.`));
 
@@ -302,11 +353,7 @@ class RedisClient extends EventEmitter {
     }
 
     _initializeSubClient() {
-        this.subClient = createClient({
-            socket: { path: this.socketPath },
-            username: 'root',
-            password: 'root',
-        });
+        this.subClient = createClient(this.connectionConfig);
         this.subClient.on('error', (err) => console.error(`[${this.alias}] Subscription error:`, err));
         this.subClient.on('ready', async () => {
             console.log(`[${this.alias}] Subscription client reconnected.`);

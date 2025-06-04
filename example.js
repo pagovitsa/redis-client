@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Example usage of @bcoders/redis-client
+ * Example usage of @bcoders.gr/redis-client
  * 
  * This example demonstrates the main features of the enhanced Redis client.
  * Note: This requires a Redis server running with Unix socket at /media/redis/local.sock
@@ -10,10 +10,17 @@
 import RedisClient from './index.js';
 
 async function runExample() {
-    console.log('🚀 @bcoders/redis-client Example\n');
+    console.log('🚀 @bcoders.gr/redis-client Example\n');
     
-    // Create a Redis client instance
-    const redis = new RedisClient('example-app', false); // false = local connection
+    // Create a Redis client instance with different connection options
+    console.log('Connection options:');
+    console.log('1. Default local socket: new RedisClient("app")');
+    console.log('2. With credentials: new RedisClient("app", {}, "user", "pass")');
+    console.log('3. IP connection: new RedisClient("app", "192.168.1.100:6379", "user", "pass")');
+    console.log('4. Custom socket: new RedisClient("app", "/custom/redis.sock", "admin", "secret")');
+    console.log('5. Full config: new RedisClient("app", { host: "localhost", port: 6379, username: "admin", password: "secret" })\n');
+    
+    const redis = new RedisClient('example-app', {}, 'root', 'root'); // Default with credentials
     
     try {
         // Wait a moment for connection to establish

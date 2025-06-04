@@ -1,4 +1,4 @@
-# Enhanced Redis Client
+# @bcoders.gr/redis-client
 
 A self-contained, feature-rich Redis client with built-in compression, performance monitoring, and keyspace event subscriptions. This package provides all the functionality of the original RedisClient without external tool dependencies.
 
@@ -15,16 +15,47 @@ A self-contained, feature-rich Redis client with built-in compression, performan
 ## Installation
 
 ```bash
-npm install @bcoders/redis-client
+npm install @bcoders.gr/redis-client
 ```
 
 ## Basic Usage
 
 ```javascript
-import RedisClient from '@bcoders/redis-client';
+import RedisClient from '@bcoders.gr/redis-client';
 
-// Create a client instance
-const redis = new RedisClient('my-app', false); // false = local, true = remote
+// Create a client instance with different connection options:
+
+// 1. Default local socket connection with default credentials
+const redis = new RedisClient('my-app');
+
+// 2. With custom username and password
+const redis = new RedisClient('my-app', {}, 'admin', 'secret');
+
+// 3. Legacy boolean option (backward compatibility)
+const redis = new RedisClient('my-app', false, 'user', 'pass'); // local socket
+const redis = new RedisClient('my-app', true, 'user', 'pass');  // remote socket
+
+// 4. Custom socket path with credentials
+const redis = new RedisClient('my-app', '/custom/path/redis.sock', 'admin', 'secret');
+
+// 5. IP address connection with credentials
+const redis = new RedisClient('my-app', '192.168.1.100', 'user', 'password');
+const redis = new RedisClient('my-app', '192.168.1.100:6380', 'admin', 'secret');
+
+// 6. Full configuration object (overrides individual username/password)
+const redis = new RedisClient('my-app', {
+    host: '192.168.1.100',
+    port: 6379,
+    username: 'admin',
+    password: 'secret'
+});
+
+// 7. Socket path with configuration object
+const redis = new RedisClient('my-app', {
+    path: '/custom/redis.sock',
+    username: 'admin',
+    password: 'secret'
+});
 
 // Set a value (automatically compressed)
 await redis.setKey('users', 'john', { 
@@ -45,6 +76,29 @@ await redis.deleteKey('users', 'john');
 // Clean up
 redis.destroy();
 ```
+
+## Constructor API
+
+```javascript
+new RedisClient(alias, connectionOptions, username, password)
+```
+
+**Parameters:**
+- `alias` (string, optional): A unique identifier for this client instance. Default: `'default'`
+- `connectionOptions` (various types, optional): Connection configuration. Default: `{}`
+  - **Boolean**: `true` for remote socket (`/media/redis/remote.sock`), `false` for local socket (`/media/redis/local.sock`)
+  - **String**: Socket path (if contains `/` or `.sock`) or IP address with optional port (`192.168.1.100:6379`)
+  - **Object**: Full configuration object with properties:
+    - `host`: Redis server hostname (default: 'localhost')
+    - `port`: Redis server port (default: 6379)
+    - `path`: Unix socket path
+    - `username`: Redis username
+    - `password`: Redis password
+    - `socket`: Socket configuration object
+- `username` (string, optional): Redis username. Default: `'root'`
+- `password` (string, optional): Redis password. Default: `'root'`
+
+**Note:** If `connectionOptions` is an object with `username` and `password` properties, they will override the individual `username` and `password` parameters.
 
 ## Advanced Features
 

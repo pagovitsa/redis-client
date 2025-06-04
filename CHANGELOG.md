@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-06-04
+
+### Added
+- Enhanced constructor to accept flexible connection options (socket path or IP address)
+- Support for custom username and password parameters in constructor
+- Backward compatibility with legacy boolean connection options
+- Improved connection configuration handling for various Redis setups
+
+### Changed
+- Constructor signature now supports: `new RedisClient(alias, connectionOptions, username, password)`
+- Documentation updated with comprehensive connection examples
+
 ## [1.0.0] - 2025-06-04
 
 ### Added
