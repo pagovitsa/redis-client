@@ -76,6 +76,10 @@ await redis.setKey('users', 'john', {
 const user = await redis.getKey('users', 'john');
 console.log(user); // { name: 'John Doe', email: 'john@example.com' }
 
+// Get an entire namespace (new in v1.2.2)
+const allUsers = await redis.getNamespaceSnapshot('users');
+console.log(`Retrieved ${Object.keys(allUsers).length} users`);
+
 // Check if key exists
 const exists = await redis.checkKey('users', 'john');
 
@@ -303,6 +307,7 @@ Both connections use:
 - `getNamespaceSize(namespace)` - Get number of keys in namespace
 - `getKeys(namespace)` - Get all keys in namespace (using SCAN)
 - `getNamespace(namespace)` - Get all keys matching namespace pattern
+- `getNamespaceSnapshot(namespace, batchSize?)` - Get complete snapshot of all keys and values from a namespace
 
 ### Connection Management
 
@@ -338,6 +343,33 @@ The client includes comprehensive error handling:
 - Connection errors are logged and trigger reconnection attempts
 - Operation errors are logged with context
 - Failed operations return `null` or `false` rather than throwing (configurable)
+
+## Namespace Snapshot
+
+The `getNamespaceSnapshot()` method provides a complete snapshot of all keys and values from a Redis namespace in a single operation.
+
+```javascript
+// Get all data from 'pair' namespace
+const pairData = await client.getNamespaceSnapshot('pair');
+console.log(`Retrieved ${Object.keys(pairData).length} pairs`);
+
+// Sample of first few items
+const sampleKeys = Object.keys(pairData).slice(0, 3);
+sampleKeys.forEach(key => {
+  console.log(`${key}: ${JSON.stringify(pairData[key])}`);
+});
+
+// For large datasets, use a custom batch size
+const blockData = await client.getNamespaceSnapshot('block', 200);
+```
+
+### Benefits of getNamespaceSnapshot
+
+- **Simplified Data Retrieval**: Get all namespace data in a single call
+- **Clean Result Structure**: Keys have namespace prefix removed for easier processing
+- **High Performance**: Uses optimized bulk batched operations under the hood
+- **Memory Efficient**: Processes data in batches to manage memory usage
+- **Automatic Type Handling**: Preserves original value types (objects, arrays, etc.)
 
 ## Performance
 

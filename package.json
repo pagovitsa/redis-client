@@ -8,6 +8,7 @@
     "test": "node test.js",
     "test:performance": "node performance-test.js",
     "test:fixes": "node fix-test.js",
+    "test:snapshot": "node snapshot-test.js",
     "benchmark": "node performance-test.js",
     "prepare": "echo 'Package ready'"
   },
@@ -19,6 +20,8 @@
     "redis",
     "client",
     "compression",
+    "namespace",
+    "snapshot",
     "performance",
     "monitoring",
     "subscriptions",
