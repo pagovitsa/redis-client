@@ -96,6 +96,7 @@ class RedisClient extends EventEmitter {
         this.isConnecting = false;
         this.connectionPromise = null;
         this.subClientConnectionPromise = null;
+        this.keyspaceEventsConfigured = false; // Track if keyspace events are configured
         
         // Performance optimizations
         this.compressionCache = new Map(); // Cache for compression results
@@ -461,6 +462,19 @@ class RedisClient extends EventEmitter {
     // SUBSCRIPTION METHODS
     
     async subscribeToKeyspaceEvents(namespace) {
+        // Configure keyspace events on main client if not already done
+        if (!this.keyspaceEventsConfigured) {
+            try {
+                await this._ensureClientConnected();
+                await this.client.sendCommand(['CONFIG', 'SET', 'notify-keyspace-events', 'KEA']);
+                this.keyspaceEventsConfigured = true;
+                console.log(`[${this.alias}] Configured keyspace events.`);
+            } catch (configErr) {
+                console.error(`[${this.alias}] Warning: Could not configure keyspace events:`, configErr.message);
+                // Continue anyway - keyspace events might already be configured
+            }
+        }
+
         if (!this.subClient) {
             await this._initializeSubClient();
         } else if (this.subClientConnectionPromise) {
@@ -473,7 +487,7 @@ class RedisClient extends EventEmitter {
                 await this.subClientConnectionPromise;
             }
             
-            await this.subClient.sendCommand(['CONFIG', 'SET', 'notify-keyspace-events', 'KEA']);
+            // Subscribe to keyspace events (removed CONFIG SET from here)
             const pattern = `__keyspace@0__:${namespace}:*`;
             await this.subClient.pSubscribe(pattern, (message, channel) => {
                 const key = channel.replace(`__keyspace@0__:${namespace}:`, '');

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2025-06-04
+
+### Fixed
+- **Subscription Bug**: Fixed critical bug where multiple namespace subscriptions failed due to CONFIG SET being executed on subscription client
+- **Multiple Subscriptions**: Now properly supports subscribing to multiple namespaces simultaneously
+- **CONFIG Command**: Moved keyspace events configuration to main client instead of subscription client
+- **Error Handling**: Added proper error handling for keyspace events configuration
+
+### Technical Details
+- The `subscribeToKeyspaceEvents()` method now executes `CONFIG SET notify-keyspace-events KEA` on the main client only once per instance
+- Added `keyspaceEventsConfigured` flag to prevent redundant configuration calls
+- This fixes the "ERR Can't execute 'config|set': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context" error
+
 ## [1.2.0] - 2025-06-04
 
 ### Added
