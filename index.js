@@ -239,20 +239,10 @@ class RedisClient extends EventEmitter {
     async getNamespaceSize(namespace) {
         try {
             await this._ensureClientConnected();
-            // Use SCAN for better performance on large datasets
-            const pattern = `${namespace}:*`;
-            let cursor = '0';
-            let count = 0;
-            do {
-                const result = await this.client.scan(cursor, {
-                    MATCH: pattern,
-                    COUNT: 1000
-                });
-                cursor = result.cursor;
-                count += result.keys.length;
-            } while (cursor !== '0');
-            console.log(`[${this.alias}] ${count} keys in '${namespace}'.`);
-            return count;
+            // Use KEYS command for simplicity and reliability
+            const keys = await this.client.keys(`${namespace}:*`);
+            console.log(`[${this.alias}] ${keys.length} keys in '${namespace}'.`);
+            return keys.length;
         } catch (error) {
             console.error(`[${this.alias}] Error retrieving namespace size:`, error);
             throw error;
@@ -262,17 +252,8 @@ class RedisClient extends EventEmitter {
     async getKeys(namespace) {
         try {
             await this._ensureClientConnected();
-            const pattern = `${namespace}:*`;
-            let cursor = '0';
-            let keys = [];
-            do {
-                const result = await this.client.scan(cursor, {
-                    MATCH: pattern,
-                    COUNT: 100
-                });
-                cursor = result.cursor;
-                keys = keys.concat(result.keys);
-            } while (cursor !== '0');
+            // Use KEYS command for simplicity and reliability
+            const keys = await this.client.keys(`${namespace}:*`);
             return keys;
         } catch (error) {
             console.error(`[${this.alias}] Error getting namespace keys:`, error);
