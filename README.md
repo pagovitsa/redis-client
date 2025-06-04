@@ -252,16 +252,6 @@ The client includes comprehensive error handling:
 - Pipeline support for batch operations
 - Performance monitoring helps identify bottlenecks
 
-## Examples
-
-Run the included example:
-
-```bash
-npm run example
-```
-
-This demonstrates all major features of the client.
-
 ## Requirements
 
 - Node.js 16+

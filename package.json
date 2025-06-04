@@ -1,11 +1,10 @@
 {
   "name": "@bcoders.gr/redis-client",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "example": "node example.js",
     "test": "node test.js",
     "prepare": "echo 'Package ready'"
   },
@@ -44,7 +43,6 @@
     "index.js",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md",
-    "example.js"
+    "CHANGELOG.md"
   ]
 }

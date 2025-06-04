@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2025-06-04
+
+### Removed
+- **Example File**: Removed example.js file to streamline package distribution
+- **Example Script**: Removed npm run example script from package.json
+- **Example Documentation**: Cleaned up README.md references to example usage
+
+### Changed
+- Updated package files list to exclude example.js
+- Cleaner project structure focused on core functionality
+- Fixed test suite cleanup to prevent hanging tests
+
+## [1.1.1] - 2025-06-04
+
+### Fixed
+- **Race Condition Fix**: Fixed critical race condition where commands could be sent before Redis connection was established
+- **Connection Promise Management**: Added proper promise tracking for both main and subscription client connections
+- **Subscription Client Initialization**: Made `_initializeSubClient()` async and ensured connection is awaited before sending commands
+- **Connection State Verification**: Enhanced `_ensureClientConnected()` to properly wait for ongoing connections
+
+### Technical Improvements
+- Added `subClientConnectionPromise` tracking for subscription client connections
+- Enhanced error handling for connection timing issues
+- Improved connection reliability for keyspace event subscriptions
+
 ## [1.1.0] - 2025-06-04
 
 ### Added

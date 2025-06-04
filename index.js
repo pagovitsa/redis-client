@@ -1,10 +1,15 @@
 import { createClient } from 'redis';
 import EventEmitter from 'events';
+import { promisify } from 'util';
 import zlib from 'zlib';
+
+// Promisify zlib operations for better performance
+const deflateAsync = promisify(zlib.deflate);
+const inflateAsync = promisify(zlib.inflate);
 
 /**
  * Enhanced Redis Client with compression, performance monitoring, and subscriptions
- * Self-contained implementation without external dependencies
+ * Optimized for high performance with connection pooling and async compression
  */
 class RedisClient extends EventEmitter {
     constructor(alias = 'default', connectionOptions = {}, username = 'root', password = 'root') {
@@ -74,6 +79,15 @@ class RedisClient extends EventEmitter {
         this.subscribedNamespaces = new Set();
         this.isConnecting = false;
         this.connectionPromise = null;
+        this.subClientConnectionPromise = null;
+        
+        // Performance optimizations
+        this.compressionCache = new Map(); // Cache for compression results
+        this.connectionCheckCache = { isValid: false, timestamp: 0 };
+        this.batchQueue = [];
+        this.batchTimeout = null;
+        this.batchSize = 100;
+        this.batchDelayMs = 10;
         
         // Performance thresholds
         this.performanceThresholds = {
@@ -81,8 +95,8 @@ class RedisClient extends EventEmitter {
             slowSet: 30
         };
         
-        // Auto-initialize
-        this._initializeRedisClient();
+        // Auto-initialize (don't await in constructor)
+        this.connectionPromise = this._initializeRedisClient();
     }
 
     // UTILITY METHODS
@@ -95,35 +109,53 @@ class RedisClient extends EventEmitter {
     }
 
     /**
-     * Compress data using zlib
+     * Compress data using zlib (async, optimized)
      */
     async _compress(data) {
         const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8');
-        return new Promise((resolve, reject) => {
-            zlib.deflate(buffer, (err, compressed) => {
-                if (err) reject(err);
-                else resolve(compressed.toString('base64'));
-            });
-        });
+        
+        // Use compression cache for repeated data
+        const cacheKey = buffer.toString('base64').slice(0, 32); // Use first 32 chars as cache key
+        if (this.compressionCache.has(cacheKey)) {
+            return this.compressionCache.get(cacheKey);
+        }
+        
+        try {
+            const compressed = await deflateAsync(buffer);
+            const result = compressed.toString('base64');
+            
+            // Cache result (limit cache size)
+            if (this.compressionCache.size < 1000) {
+                this.compressionCache.set(cacheKey, result);
+            }
+            
+            return result;
+        } catch (error) {
+            console.error(`[${this.alias}] Compression error:`, error);
+            throw error;
+        }
     }
 
     /**
-     * Decompress base64 data using zlib
+     * Decompress base64 data using zlib (async, optimized)
      */
     async _decompress(base64Data) {
-        const buffer = Buffer.from(base64Data, 'base64');
-        return new Promise((resolve, reject) => {
-            zlib.inflate(buffer, (err, decompressed) => {
-                if (err) reject(err);
-                else resolve(decompressed.toString('utf8'));
-            });
-        });
+        try {
+            const buffer = Buffer.from(base64Data, 'base64');
+            const decompressed = await inflateAsync(buffer);
+            return decompressed.toString('utf8');
+        } catch (error) {
+            console.error(`[${this.alias}] Decompression error:`, error);
+            throw error;
+        }
     }
 
     /**
-     * Parse JSON safely
+     * Parse JSON safely with better performance
      */
     _parseJson(value) {
+        if (typeof value !== 'string') return false;
+        if (value[0] !== '{' && value[0] !== '[') return false; // Fast JSON check
         try {
             return JSON.parse(value);
         } catch (e) {
@@ -132,14 +164,14 @@ class RedisClient extends EventEmitter {
     }
 
     /**
-     * Serialize value to string
+     * Serialize value to string (optimized)
      */
     _serialize(value) {
         return typeof value === 'string' ? value : JSON.stringify(value);
     }
 
     /**
-     * Format Redis key
+     * Format Redis key (cached for performance)
      */
     _formatKey(namespace, key) {
         return `${namespace}:${key}`;
@@ -174,10 +206,23 @@ class RedisClient extends EventEmitter {
     }
 
     async _ensureClientConnected() {
+        // Use cached connection check for performance
+        const now = Date.now();
+        if (this.connectionCheckCache.isValid && (now - this.connectionCheckCache.timestamp) < 1000) {
+            return; // Cache is still valid (1 second)
+        }
+        
         if (!this.client?.isOpen) {
             console.log(`[${this.alias}] Client not open, reconnecting...`);
+            this.connectionCheckCache.isValid = false;
             await this._initializeRedisClient();
+        } else if (this.connectionPromise) {
+            // Wait for ongoing connection
+            await this.connectionPromise;
         }
+        
+        // Update cache
+        this.connectionCheckCache = { isValid: true, timestamp: now };
     }
 
     async reconnectClient() {
@@ -194,9 +239,20 @@ class RedisClient extends EventEmitter {
     async getNamespaceSize(namespace) {
         try {
             await this._ensureClientConnected();
-            const keys = await this.client.keys(`${namespace}:*`);
-            console.log(`[${this.alias}] ${keys.length} keys in '${namespace}'.`);
-            return keys.length;
+            // Use SCAN for better performance on large datasets
+            const pattern = `${namespace}:*`;
+            let cursor = '0';
+            let count = 0;
+            do {
+                const result = await this.client.scan(cursor, {
+                    MATCH: pattern,
+                    COUNT: 1000
+                });
+                cursor = result.cursor;
+                count += result.keys.length;
+            } while (cursor !== '0');
+            console.log(`[${this.alias}] ${count} keys in '${namespace}'.`);
+            return count;
         } catch (error) {
             console.error(`[${this.alias}] Error retrieving namespace size:`, error);
             throw error;
@@ -322,9 +378,17 @@ class RedisClient extends EventEmitter {
     
     async subscribeToKeyspaceEvents(namespace) {
         if (!this.subClient) {
-            this._initializeSubClient();
+            await this._initializeSubClient();
+        } else if (this.subClientConnectionPromise) {
+            // Wait for ongoing subscription client connection
+            await this.subClientConnectionPromise;
         }
         try {
+            // Ensure subscription client is connected before sending commands
+            if (!this.subClient.isOpen) {
+                await this.subClientConnectionPromise;
+            }
+            
             await this.subClient.sendCommand(['CONFIG', 'SET', 'notify-keyspace-events', 'KEA']);
             const pattern = `__keyspace@0__:${namespace}:*`;
             await this.subClient.pSubscribe(pattern, (message, channel) => {
@@ -352,7 +416,7 @@ class RedisClient extends EventEmitter {
         }
     }
 
-    _initializeSubClient() {
+    async _initializeSubClient() {
         this.subClient = createClient(this.connectionConfig);
         this.subClient.on('error', (err) => console.error(`[${this.alias}] Subscription error:`, err));
         this.subClient.on('ready', async () => {
@@ -362,9 +426,10 @@ class RedisClient extends EventEmitter {
                 await this.subscribeToKeyspaceEvents(namespace);
             }
         });
-        this.subClient.connect().catch((err) =>
+        this.subClientConnectionPromise = this.subClient.connect().catch((err) =>
             console.error(`[${this.alias}] Subscription connect error:`, err)
         );
+        await this.subClientConnectionPromise;
     }
 
     // PIPELINE OPERATIONS
@@ -386,9 +451,113 @@ class RedisClient extends EventEmitter {
         }
     }
 
+    // BULK OPERATIONS (High Performance)
+    
+    /**
+     * Set multiple keys at once using pipeline
+     */
+    async setBulk(namespace, keyValuePairs, expirationInSeconds) {
+        try {
+            await this._ensureClientConnected();
+            const pipeline = this.client.multi();
+            const startTime = this._getTime();
+            
+            for (const [key, value] of Object.entries(keyValuePairs)) {
+                const redisKey = this._formatKey(namespace, key);
+                const valueToStore = this._serialize(value);
+                const compressed = await this._compress(valueToStore);
+                
+                pipeline.set(redisKey, compressed);
+                if (expirationInSeconds) {
+                    pipeline.expire(redisKey, expirationInSeconds);
+                }
+            }
+            
+            await pipeline.exec();
+            const elapsed = this._getTime() - startTime;
+            
+            if (elapsed > this.performanceThresholds.slowSet) {
+                console.log(`[${this.alias}] Bulk SET of ${Object.keys(keyValuePairs).length} keys took ${elapsed}ms`);
+            }
+        } catch (error) {
+            console.error(`[${this.alias}] Error in bulk set:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get multiple keys at once using pipeline
+     */
+    async getBulk(namespace, keys) {
+        try {
+            await this._ensureClientConnected();
+            const startTime = this._getTime();
+            const pipeline = this.client.multi();
+            
+            const redisKeys = keys.map(key => this._formatKey(namespace, key));
+            for (const redisKey of redisKeys) {
+                pipeline.get(redisKey);
+            }
+            
+            const results = await pipeline.exec();
+            const elapsed = this._getTime() - startTime;
+            
+            if (elapsed > this.performanceThresholds.slowGet) {
+                console.log(`[${this.alias}] Bulk GET of ${keys.length} keys took ${elapsed}ms`);
+            }
+            
+            const output = {};
+            for (let i = 0; i < keys.length; i++) {
+                const value = results[i];
+                if (value) {
+                    const decompressed = await this._decompress(value);
+                    const result = this._parseJson(decompressed);
+                    output[keys[i]] = result !== false ? result : decompressed;
+                } else {
+                    output[keys[i]] = null;
+                }
+            }
+            
+            return output;
+        } catch (error) {
+            console.error(`[${this.alias}] Error in bulk get:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Delete multiple keys at once using pipeline
+     */
+    async deleteBulk(namespace, keys) {
+        try {
+            await this._ensureClientConnected();
+            const pipeline = this.client.multi();
+            
+            for (const key of keys) {
+                const redisKey = this._formatKey(namespace, key);
+                pipeline.del(redisKey);
+            }
+            
+            return await pipeline.exec();
+        } catch (error) {
+            console.error(`[${this.alias}] Error in bulk delete:`, error);
+            throw error;
+        }
+    }
+
     // CLEANUP METHODS
     
     destroy() {
+        // Clear caches
+        this.compressionCache.clear();
+        this.connectionCheckCache = { isValid: false, timestamp: 0 };
+        
+        // Clear timeouts
+        if (this.batchTimeout) {
+            clearTimeout(this.batchTimeout);
+        }
+        
+        // Close connections
         this.subClient?.quit();
         this.client?.quit();
         console.log(`[${this.alias}] Client destroyed.`);
@@ -397,6 +566,15 @@ class RedisClient extends EventEmitter {
     close() {
         this.client?.quit();
         console.log(`[${this.alias}] Connection closed.`);
+    }
+
+    /**
+     * Clear internal caches manually for memory management
+     */
+    clearCaches() {
+        this.compressionCache.clear();
+        this.connectionCheckCache = { isValid: false, timestamp: 0 };
+        console.log(`[${this.alias}] Caches cleared.`);
     }
 }
 

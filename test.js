@@ -9,6 +9,9 @@ import RedisClient from './index.js';
 
 console.log('🧪 Running basic tests for @bcoders/redis-client...\n');
 
+// Keep track of all clients for cleanup
+const testClients = [];
+
 // Test 1: Module import
 try {
     console.log('✅ Test 1: Module import successful');
@@ -19,7 +22,8 @@ try {
 
 // Test 2: Class instantiation
 try {
-    const client = new RedisClient('test-client');
+    const client = new RedisClient('test-client-2');
+    testClients.push(client);
     console.log('✅ Test 2: Class instantiation successful');
 } catch (error) {
     console.error('❌ Test 2: Class instantiation failed:', error.message);
@@ -28,7 +32,8 @@ try {
 
 // Test 3: Method availability
 try {
-    const client = new RedisClient('test-client');
+    const client = new RedisClient('test-client-3');
+    testClients.push(client);
     const methods = [
         'setKey',
         'getKey',
@@ -53,7 +58,8 @@ try {
 
 // Test 4: Utility methods
 try {
-    const client = new RedisClient('test-client');
+    const client = new RedisClient('test-client-4');
+    testClients.push(client);
     
     // Test serialization
     const serialized = client._serialize({ test: 'data' });
@@ -81,3 +87,19 @@ try {
 
 console.log('\n🎉 All basic tests passed!');
 console.log('📝 Note: These are smoke tests. Full functionality requires a Redis server connection.');
+
+// Clean up all Redis connections
+console.log('🧹 Cleaning up Redis connections...');
+for (const client of testClients) {
+    try {
+        client.destroy();
+    } catch (error) {
+        // Ignore cleanup errors
+    }
+}
+
+// Force exit after a short delay to ensure cleanup
+setTimeout(() => {
+    console.log('✨ Test cleanup completed');
+    process.exit(0);
+}, 100);
