@@ -7,7 +7,7 @@
 
 import RedisClient from './index.js';
 
-console.log('🚀 Performance Testing @bcoders.gr/redis-client v1.1.3+');
+console.log('🚀 Performance Testing @bcoders.gr/redis-client');
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
 const client = new RedisClient('perf-test', '/media/redis/local.sock', 'root', 'root');

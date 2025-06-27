@@ -27,10 +27,33 @@ const PIPELINE_BATCH_SIZE = 50;
  * - Memory-efficient key formatting
  * - Async compression with caching
  */
+/**
+ * RedisClient - High-performance Redis client with advanced features
+ * 
+ * @class
+ */
 class RedisClient extends EventEmitter {
-    constructor(alias = 'default', connectionOptions = {}, username = 'root', password = 'root') {
+    /**
+     * Creates an instance of RedisClient.
+     * @param {string} [alias='default'] - Unique identifier for the client instance.
+     * @param {boolean|string|object} [connectionOptions={}] - Connection configuration.
+     * @param {string} [username='root'] - Redis username.
+     * @param {string} [password='root'] - Redis password.
+     */
+    constructor(alias = process.env.REDIS_CLIENT_ALIAS || 'default', connectionOptions = {}, username = process.env.REDIS_CLIENT_USERNAME || 'root', password = process.env.REDIS_CLIENT_PASSWORD || 'root') {
         super();
         this.alias = alias;
+        
+        // Allow environment variable override for connection options
+        if (process.env.REDIS_CLIENT_CONNECTION) {
+            try {
+                const envConfig = JSON.parse(process.env.REDIS_CLIENT_CONNECTION);
+                connectionOptions = envConfig;
+            } catch (e) {
+                // If not JSON, treat as string
+                connectionOptions = process.env.REDIS_CLIENT_CONNECTION;
+            }
+        }
         
         // Handle different connection options
         if (typeof connectionOptions === 'boolean') {
@@ -299,13 +322,17 @@ class RedisClient extends EventEmitter {
     async _initializeRedisClient() {
         console.log(`[${this.alias}] Initializing Redis client...`);
         this.client = createClient(this.connectionConfig);
-        this.client.on('error', (err) => console.error(`[${this.alias}] Redis error:`, err));
+        this.client.on('error', (err) => {
+            console.error(`[${this.alias}] Redis error:`, err);
+            // Consider adding retry logic or alerting here for production
+        });
         this.client.on('ready', () => console.log(`[${this.alias}] Redis connected.`));
 
         try {
             await this.client.connect();
         } catch (err) {
             console.error(`[${this.alias}] Connection error:`, err);
+            // Retry connection with exponential backoff could be added here
         }
     }
 
@@ -317,9 +344,14 @@ class RedisClient extends EventEmitter {
         }
         
         if (!this.client?.isOpen) {
-            console.log(`[${this.alias}] Client not open, reconnecting...`);
+            console.warn(`[${this.alias}] Client not open, reconnecting...`);
             this.connectionCheckCache.isValid = false;
-            await this._initializeRedisClient();
+            try {
+                await this._initializeRedisClient();
+            } catch (err) {
+                console.error(`[${this.alias}] Reconnection failed:`, err);
+                throw err;
+            }
         } else if (this.connectionPromise) {
             // Wait for ongoing connection
             await this.connectionPromise;
@@ -335,7 +367,12 @@ class RedisClient extends EventEmitter {
             return;
         }
         console.log(`[${this.alias}] Reinitializing connection...`);
-        await this._initializeRedisClient();
+        try {
+            await this._initializeRedisClient();
+        } catch (err) {
+            console.error(`[${this.alias}] Reconnection error:`, err);
+            throw err;
+        }
     }
 
     // NAMESPACE OPERATIONS

@@ -10,7 +10,8 @@
     "test:fixes": "node fix-test.js",
     "test:snapshot": "node snapshot-test.js",
     "benchmark": "node performance-test.js",
-    "prepare": "echo 'Package ready'"
+    "prepare": "echo 'Package ready'",
+    "publish:package": "npm publish --access public"
   },
   "dependencies": {
     "redis": "^4.6.0"
