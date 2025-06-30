@@ -6,8 +6,9 @@
 
 ## Key Features
 
-- **Advanced Compression:** Automatic zlib compression and decompression with caching to reduce memory usage.
+- **Advanced Compression:** Optional zlib compression and decompression with caching to reduce memory usage and network bandwidth.
 - **Multi-level Caching:** Caches compression, decompression, and key formatting results for optimal performance.
+- **Hash Operations:** Full support for Redis hash operations with `hset` and `hget` methods, including compression support.
 - **Bulk Operations:** Supports batch processing and pipelining for efficient handling of large datasets.
 - **Performance Monitoring:** Real-time statistics tracking including cache hit rates, operation counts, and timing metrics.
 - **Connection Management:** Robust connection handling with auto-reconnection and connection pooling.
@@ -28,13 +29,11 @@ npm install @bcoders.gr/redis-client
 ```javascript
 import RedisClient from '@bcoders.gr/redis-client';
 
-// Create a client instance
+// Create a client instance with compression enabled
 const redis = new RedisClient('my-app', {
     host: 'localhost',
-    port: 6379,
-    username: 'root',
-    password: 'root'
-});
+    port: 6379
+}, 'username', 'password', true); // Enable compression
 
 // Set a key with automatic compression
 await redis.setKey('users', 'john', { name: 'John Doe', email: 'john@example.com' });
@@ -42,6 +41,10 @@ await redis.setKey('users', 'john', { name: 'John Doe', email: 'john@example.com
 // Get a key with automatic decompression
 const user = await redis.getKey('users', 'john');
 console.log(user);
+
+// Hash operations with compression
+await redis.hset('user-profiles', 'john', 'settings', { theme: 'dark', notifications: true });
+const settings = await redis.hget('user-profiles', 'john', 'settings');
 
 // Bulk set keys
 const bulkData = {
@@ -59,6 +62,18 @@ await redis.subscribeToKeyspaceEvents('users');
 
 ## API Reference
 
+### Constructor
+
+```javascript
+new RedisClient(alias, connectionOptions, username, password, enableCompression)
+```
+
+- `alias` (string): Unique identifier for the client instance (default: 'default')
+- `connectionOptions` (object): Redis connection configuration
+- `username` (string): Redis username (default: 'root')
+- `password` (string): Redis password (default: 'root')
+- `enableCompression` (boolean): Enable zlib compression (default: false)
+
 ### Core Methods
 
 - `setKey(namespace, key, value, expirationInSeconds?)` - Store a key-value pair with optional TTL.
@@ -66,6 +81,11 @@ await redis.subscribeToKeyspaceEvents('users');
 - `checkKey(namespace, key)` - Check if a key exists.
 - `deleteKey(namespace, key, pipeline?)` - Delete a key.
 - `expireKey(namespace, key, seconds)` - Set expiration on a key.
+
+### Hash Operations
+
+- `hset(namespace, key, field, value)` - Set a field in a hash with compression support.
+- `hget(namespace, key, field)` - Get a field from a hash with decompression support.
 
 ### Bulk Operations
 

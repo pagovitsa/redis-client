@@ -39,10 +39,12 @@ class RedisClient extends EventEmitter {
      * @param {boolean|string|object} [connectionOptions={}] - Connection configuration.
      * @param {string} [username='root'] - Redis username.
      * @param {string} [password='root'] - Redis password.
+     * @param {boolean} [enableCompression=false] - Whether to enable zlib compression (default false).
      */
-    constructor(alias = process.env.REDIS_CLIENT_ALIAS || 'default', connectionOptions = {}, username = process.env.REDIS_CLIENT_USERNAME || 'root', password = process.env.REDIS_CLIENT_PASSWORD || 'root') {
+    constructor(alias = process.env.REDIS_CLIENT_ALIAS || 'default', connectionOptions = {}, username = process.env.REDIS_CLIENT_USERNAME || 'root', password = process.env.REDIS_CLIENT_PASSWORD || 'root', enableCompression = false) {
         super();
         this.alias = alias;
+        this.enableCompression = enableCompression;
         
         // Allow environment variable override for connection options
         if (process.env.REDIS_CLIENT_CONNECTION) {
@@ -179,6 +181,10 @@ class RedisClient extends EventEmitter {
      * Compress data using zlib (async, optimized with caching)
      */
     async _compress(data) {
+        if (!this.enableCompression) {
+            // Compression disabled, return original data as string
+            return typeof data === 'string' ? data : JSON.stringify(data);
+        }
         const startTime = this._getTime();
         const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8');
         
@@ -216,6 +222,10 @@ class RedisClient extends EventEmitter {
      * Decompress base64 data using zlib (async, optimized with caching)
      */
     async _decompress(base64Data) {
+        if (!this.enableCompression) {
+            // Decompression disabled, return original data as string
+            return base64Data;
+        }
         const startTime = this._getTime();
         const cacheKey = this._getCacheKey(base64Data);
         
@@ -458,6 +468,59 @@ class RedisClient extends EventEmitter {
         } catch (error) {
             console.error(`[${this.alias}] Error saving key:`, error);
             throw error;
+        }
+    }
+
+    /**
+     * Set a field in a hash stored at key with compression
+     * @param {string} namespace - Namespace for the key
+     * @param {string} key - Redis key
+     * @param {string} field - Field in the hash
+     * @param {*} value - Value to set
+     * @returns {Promise<void>}
+     */
+    async hset(namespace, key, field, value) {
+        try {
+            await this._ensureClientConnected();
+            const redisKey = this._formatKey(namespace, key);
+            const valueToStore = this._serialize(value);
+            const compressed = await this._compress(valueToStore);
+
+            const startTime = this._getTime();
+            await this.client.hSet(redisKey, field, compressed);
+            const elapsed = this._getTime() - startTime;
+            this._logPerformance('hset', elapsed, namespace, key);
+        } catch (error) {
+            console.error(`[${this.alias}] Error in hset:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get a field from a hash stored at key with decompression
+     * @param {string} namespace - Namespace for the key
+     * @param {string} key - Redis key
+     * @param {string} field - Field in the hash
+     * @returns {Promise<*>} - The value of the field or null if not found
+     */
+    async hget(namespace, key, field) {
+        try {
+            await this._ensureClientConnected();
+            const redisKey = this._formatKey(namespace, key);
+            const startTime = this._getTime();
+            const value = await this.client.hGet(redisKey, field);
+            const elapsed = this._getTime() - startTime;
+            this._logPerformance('hget', elapsed, namespace, key);
+
+            if (value) {
+                const decompressed = await this._decompress(value);
+                const result = this._parseJson(decompressed);
+                return result !== false ? result : decompressed;
+            }
+            return null;
+        } catch (error) {
+            console.error(`[${this.alias}] Error in hget:`, error);
+            return null;
         }
     }
 

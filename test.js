@@ -42,7 +42,9 @@ try {
         'getNamespaceSize',
         'subscribeToKeyspaceEvents',
         'createPipeline',
-        'destroy'
+        'destroy',
+        'hset',
+        'hget'
     ];
     
     for (const method of methods) {
@@ -84,6 +86,7 @@ try {
     console.error('❌ Test 4: Utility method test failed:', error.message);
     process.exit(1);
 }
+
 
 console.log('\n🎉 All basic tests passed!');
 console.log('📝 Note: These are smoke tests. Full functionality requires a Redis server connection.');
