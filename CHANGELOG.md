@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.3] - 2025-07-02
+
+### Added
+- **NEW METHOD**: `getNamespaceSnapshotClean()` - Get clean, JSON-serializable snapshots without prototype issues
+- Internal `_normalizeObject()` helper for handling objects with null prototypes
+
+### Changed
+- Enhanced all data retrieval methods to normalize objects and prevent `[Object: null prototype]` display issues
+- Improved object handling in `getNamespaceSnapshot()` for better JSON serialization
+
+### Fixed
+- **FIXED**: Resolved `[Object: null prototype]` display issues when working with Redis hash data
+- **FIXED**: Improved JSON serialization compatibility for all retrieved data
+- Better object normalization for cleaner debugging and logging output
+
 ## [1.4.2] - 2025-07-02
 
 ### Added

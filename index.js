@@ -511,20 +511,20 @@ class RedisClient extends EventEmitter {
                                 try {
                                     const decompressed = await this._decompress(value);
                                     const parsed = this._parseJson(decompressed);
-                                    result[cleanKey] = parsed !== false ? parsed : decompressed;
+                                    result[cleanKey] = this._normalizeObject(parsed !== false ? parsed : decompressed);
                                 } catch (decompressError) {
                                     // If decompression fails, store as-is
-                                    result[cleanKey] = value;
+                                    result[cleanKey] = this._normalizeObject(value);
                                 }
                                 break;
                             case 'hash':
-                                result[cleanKey] = value;
+                                result[cleanKey] = this._normalizeObject(value);
                                 break;
                             case 'list':
-                                result[cleanKey] = value;
+                                result[cleanKey] = this._normalizeObject(value);
                                 break;
                             case 'set':
-                                result[cleanKey] = value;
+                                result[cleanKey] = this._normalizeObject(value);
                                 break;
                             case 'zset':
                                 // Convert WITHSCORES result to object
@@ -534,10 +534,10 @@ class RedisClient extends EventEmitter {
                                         zsetObj[item.value] = item.score;
                                     }
                                 }
-                                result[cleanKey] = zsetObj;
+                                result[cleanKey] = this._normalizeObject(zsetObj);
                                 break;
                             default:
-                                result[cleanKey] = value;
+                                result[cleanKey] = this._normalizeObject(value);
                                 break;
                         }
                     } catch (processError) {
@@ -550,6 +550,32 @@ class RedisClient extends EventEmitter {
             return result;
         } catch (error) {
             console.error(`[${this.alias}] Error getting namespace snapshot:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get a clean, formatted snapshot of all keys and values from a Redis namespace
+     * Returns JSON-serializable objects without prototype issues
+     * @param {string} namespace - The namespace to retrieve
+     * @param {number} batchSize - Batch size for bulk operations (default: 100)
+     * @param {boolean} pretty - Whether to return pretty-formatted JSON string (default: false)
+     * @returns {Promise<Object|string>} - Clean object or formatted JSON string
+     */
+    async getNamespaceSnapshotClean(namespace, batchSize = 100, pretty = false) {
+        try {
+            const snapshot = await this.getNamespaceSnapshot(namespace, batchSize);
+            
+            // Deep clean the object to ensure it's JSON serializable
+            const cleanSnapshot = JSON.parse(JSON.stringify(snapshot));
+            
+            if (pretty) {
+                return JSON.stringify(cleanSnapshot, null, 2);
+            }
+            
+            return cleanSnapshot;
+        } catch (error) {
+            console.error(`[${this.alias}] Error getting clean namespace snapshot:`, error);
             throw error;
         }
     }
@@ -1097,6 +1123,33 @@ class RedisClient extends EventEmitter {
             console.error(`[${this.alias}] Error getting namespace string values:`, error);
             throw error;
         }
+    }
+
+    /**
+     * Normalize objects to have standard prototype and clean structure
+     * Fixes [Object: null prototype] display issues
+     * @param {*} obj - Object to normalize
+     * @returns {*} - Normalized object
+     */
+    _normalizeObject(obj) {
+        if (obj === null || obj === undefined) {
+            return obj;
+        }
+        
+        if (Array.isArray(obj)) {
+            return obj.map(item => this._normalizeObject(item));
+        }
+        
+        if (typeof obj === 'object') {
+            // Handle objects with null prototype or Redis hash objects
+            const normalized = {};
+            for (const [key, value] of Object.entries(obj)) {
+                normalized[key] = this._normalizeObject(value);
+            }
+            return normalized;
+        }
+        
+        return obj;
     }
 }
 

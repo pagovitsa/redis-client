@@ -107,6 +107,7 @@ new RedisClient(alias, connectionOptions, username, password, enableCompression)
 - `getNamespaceSize(namespace)` - Get number of keys in a namespace.
 - `getKeys(namespace)` - Get all keys in a namespace.
 - `getNamespaceSnapshot(namespace, batchSize?)` - **IMPROVED** Get a snapshot of all keys and values in a namespace. Now handles all Redis data types (strings, hashes, lists, sets, sorted sets).
+- `getNamespaceSnapshotClean(namespace, batchSize?, pretty?)` - **NEW** Get a clean, JSON-serializable snapshot without prototype issues. Perfect for processing and logging.
 - `getNamespaceStringValues(namespace, batchSize?)` - **NEW** Get only string values from a namespace (original behavior).
 - `hget(namespace, key, field?)` - **ENHANCED** Get hash field value. When field parameter is omitted, returns all fields.
 
@@ -147,6 +148,26 @@ console.log(data);
 For cases where you only want string values (original behavior):
 ```javascript
 const stringData = await client.getNamespaceStringValues('namespace');
+```
+
+### New Clean Data Methods
+
+For better data processing and to avoid `[Object: null prototype]` display issues:
+
+```javascript
+// Get clean, normalized objects (recommended)
+const cleanData = await client.getNamespaceSnapshotClean('namespace');
+console.log(JSON.stringify(cleanData, null, 2)); // Perfect JSON output
+
+// Get pretty-formatted string for logging
+const prettyData = await client.getNamespaceSnapshotClean('namespace', 100, true);
+console.log(prettyData); // Already formatted JSON string
+
+// Process transaction data cleanly
+const transactions = await client.getNamespaceSnapshotClean('tx');
+Object.entries(transactions).forEach(([hash, tx]) => {
+    console.log(`TX ${hash}: ${tx.value} wei from ${tx.from} to ${tx.to}`);
+});
 ```
 
 ### Enhanced Hash Operations

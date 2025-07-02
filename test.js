@@ -41,6 +41,7 @@ try {
         'checkKey',
         'getNamespaceSize',
         'getNamespaceSnapshot',
+        'getNamespaceSnapshotClean',
         'getNamespaceStringValues',
         'subscribeToKeyspaceEvents',
         'createPipeline',
