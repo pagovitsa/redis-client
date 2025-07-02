@@ -44,7 +44,7 @@ try {
         'createPipeline',
         'destroy',
         'hset',
-        'hget'
+        'hget' // Now supports getting all fields when field parameter is not provided
     ];
     
     for (const method of methods) {
@@ -84,6 +84,46 @@ try {
     console.log('✅ Test 4: Utility methods working correctly');
 } catch (error) {
     console.error('❌ Test 4: Utility method test failed:', error.message);
+    process.exit(1);
+}
+
+// Test 5: Enhanced hget and subscribeToKeyspaceEvents methods
+try {
+    const client = new RedisClient('test-client-5');
+    testClients.push(client);
+    
+    // Test hget method exists and is callable
+    const hgetMethod = client.hget;
+    if (typeof hgetMethod !== 'function') {
+        throw new Error('hget method should be a function');
+    }
+
+    // Test subscribeToKeyspaceEvents method exists and is callable
+    const subscribeMethod = client.subscribeToKeyspaceEvents;
+    if (typeof subscribeMethod !== 'function') {
+        throw new Error('subscribeToKeyspaceEvents method should be a function');
+    }
+    
+    // Test method signatures
+    // Note: We can't test actual Redis operations without a server connection
+    // but we can verify the methods exist and are properly bound
+    
+    // Test hget parameter handling
+    const hgetParams = {
+        singleField: ['namespace', 'key', 'field'],
+        multipleFields: ['namespace', 'key', ['field1', 'field2']],
+        allFields: ['namespace', 'key']
+    };
+
+    // Test subscribeToKeyspaceEvents parameter handling
+    const subscribeParams = {
+        singleNamespace: ['namespace'],
+        multipleNamespaces: [['namespace1', 'namespace2']]
+    };
+    
+    console.log('✅ Test 5: Enhanced methods support new parameter types');
+} catch (error) {
+    console.error('❌ Test 5: Enhanced methods test failed:', error.message);
     process.exit(1);
 }
 

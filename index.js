@@ -497,27 +497,63 @@ class RedisClient extends EventEmitter {
     }
 
     /**
-     * Get a field from a hash stored at key with decompression
+     * Get field(s) from a hash stored at key with decompression
      * @param {string} namespace - Namespace for the key
      * @param {string} key - Redis key
-     * @param {string} field - Field in the hash
-     * @returns {Promise<*>} - The value of the field or null if not found
+     * @param {string|string[]|null} [field=null] - Field specification:
+     *   - string: gets single field value
+     *   - array: gets multiple specific fields as object
+     *   - null/undefined: gets all fields as object
+     * @returns {Promise<*|Object>} - Single value, object with field-value pairs, or null if not found
      */
-    async hget(namespace, key, field) {
+    async hget(namespace, key, field = null) {
         try {
             await this._ensureClientConnected();
             const redisKey = this._formatKey(namespace, key);
             const startTime = this._getTime();
-            const value = await this.client.hGet(redisKey, field);
+
+            let value;
+            // Handle different field parameter types
+            if (field === null) {
+                // Get all fields
+                value = await this.client.hGetAll(redisKey);
+            } else if (Array.isArray(field)) {
+                // Get multiple specific fields
+                value = await this.client.hmGet(redisKey, field);
+                // Convert array result to object with field names as keys
+                const objValue = {};
+                field.forEach((f, index) => {
+                    if (value[index] !== null) {
+                        objValue[f] = value[index];
+                    }
+                });
+                value = objValue;
+            } else {
+                // Get single field
+                value = await this.client.hGet(redisKey, field);
+                if (value !== null) {
+                    // Convert single field result to object format for consistent handling
+                    value = { [field]: value };
+                }
+            }
+            
             const elapsed = this._getTime() - startTime;
             this._logPerformance('hget', elapsed, namespace, key);
 
-            if (value) {
-                const decompressed = await this._decompress(value);
-                const result = this._parseJson(decompressed);
-                return result !== false ? result : decompressed;
+            if (!value) return null;
+
+            // Decompress all values
+            const result = {};
+            for (const [fieldName, fieldValue] of Object.entries(value)) {
+                if (fieldValue !== null) {
+                    const decompressed = await this._decompress(fieldValue);
+                    const parsed = this._parseJson(decompressed);
+                    result[fieldName] = parsed !== false ? parsed : decompressed;
+                }
             }
-            return null;
+
+            // Return single value if single field was requested
+            return typeof field === 'string' ? result[field] : result;
         } catch (error) {
             console.error(`[${this.alias}] Error in hget:`, error);
             return null;
@@ -585,7 +621,10 @@ class RedisClient extends EventEmitter {
 
     // SUBSCRIPTION METHODS
     
-    async subscribeToKeyspaceEvents(namespace) {
+    async subscribeToKeyspaceEvents(namespaces) {
+        // Convert single namespace to array for consistent handling
+        const namespaceArray = Array.isArray(namespaces) ? namespaces : [namespaces];
+
         // Configure keyspace events on main client if not already done
         if (!this.keyspaceEventsConfigured) {
             try {
@@ -605,20 +644,23 @@ class RedisClient extends EventEmitter {
             // Wait for ongoing subscription client connection
             await this.subClientConnectionPromise;
         }
+
         try {
             // Ensure subscription client is connected before sending commands
             if (!this.subClient.isOpen) {
                 await this.subClientConnectionPromise;
             }
             
-            // Subscribe to keyspace events (removed CONFIG SET from here)
-            const pattern = `__keyspace@0__:${namespace}:*`;
-            await this.subClient.pSubscribe(pattern, (message, channel) => {
-                const key = channel.replace(`__keyspace@0__:${namespace}:`, '');
-                this.emit('keyspace', { namespace, key, event: message });
-            });
-            this.subscribedNamespaces.add(namespace);
-            console.log(`[${this.alias}] Subscribed to keyspace events for '${namespace}'.`);
+            // Subscribe to keyspace events for each namespace
+            for (const namespace of namespaceArray) {
+                const pattern = `__keyspace@0__:${namespace}:*`;
+                await this.subClient.pSubscribe(pattern, (message, channel) => {
+                    const key = channel.replace(`__keyspace@0__:${namespace}:`, '');
+                    this.emit('keyspace', { namespace, key, event: message });
+                });
+                this.subscribedNamespaces.add(namespace);
+                console.log(`[${this.alias}] Subscribed to keyspace events for '${namespace}'.`);
+            }
         } catch (err) {
             console.error(`[${this.alias}] Subscription error:`, err);
             throw err;
