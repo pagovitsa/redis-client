@@ -100,15 +100,78 @@ new RedisClient(alias, connectionOptions, username, password, enableCompression)
 - `incrementCounter(namespace, key, increment?)` - Atomic counter increment.
 - `decrementCounter(namespace, key, decrement?)` - Atomic counter decrement.
 - `executeScript(script, keys?, args?)` - Execute Lua scripts for complex atomic operations.
-- `subscribeToKeyspaceEvents(namespace)` - Subscribe to Redis keyspace events.
+- `subscribeToKeyspaceEvents(namespace)` - Subscribe to Redis keyspace events. Now supports both single namespace string and array of namespaces.
 - `unsubscribeFromNamespace(namespace)` - Unsubscribe from namespace.
 - `createPipeline()` - Create a new pipeline.
 - `executePipeline(pipeline)` - Execute a pipeline.
 - `getNamespaceSize(namespace)` - Get number of keys in a namespace.
 - `getKeys(namespace)` - Get all keys in a namespace.
-- `getNamespaceSnapshot(namespace, batchSize?)` - Get a snapshot of all keys and values in a namespace.
+- `getNamespaceSnapshot(namespace, batchSize?)` - **IMPROVED** Get a snapshot of all keys and values in a namespace. Now handles all Redis data types (strings, hashes, lists, sets, sorted sets).
+- `getNamespaceStringValues(namespace, batchSize?)` - **NEW** Get only string values from a namespace (original behavior).
+- `hget(namespace, key, field?)` - **ENHANCED** Get hash field value. When field parameter is omitted, returns all fields.
 
-### Performance and Monitoring
+## Key Improvements in Latest Version
+
+### Enhanced Data Type Support
+
+The `getNamespaceSnapshot()` method has been significantly improved to handle all Redis data types:
+
+- **Strings**: Compressed data stored via `setKey()` 
+- **Hashes**: Key-value pairs stored with `hSet()`
+- **Lists**: Ordered collections stored with Redis list commands
+- **Sets**: Unique collections stored with Redis set commands  
+- **Sorted Sets**: Scored collections stored with Redis sorted set commands
+
+**Before (would fail with WRONGTYPE errors):**
+```javascript
+// Would fail if namespace contained mixed data types
+const data = await client.getNamespaceSnapshot('mixed-data');
+```
+
+**Now (handles all data types gracefully):**
+```javascript
+// Works with any combination of Redis data types
+const data = await client.getNamespaceSnapshot('mixed-data');
+console.log(data);
+// {
+//   "user:1": { "name": "John", "age": 30 },           // String (compressed JSON)
+//   "profile:1": { "name": "John", "city": "NYC" },    // Hash
+//   "tags": ["redis", "database", "cache"],            // Set  
+//   "scores": { "player1": 100, "player2": 85 },       // Sorted Set
+//   "messages": ["Hello", "World", "Redis"]            // List
+// }
+```
+
+### New String-Only Method
+
+For cases where you only want string values (original behavior):
+```javascript
+const stringData = await client.getNamespaceStringValues('namespace');
+```
+
+### Enhanced Hash Operations
+
+The `hget()` method now supports getting all fields:
+```javascript
+// Get specific field
+const fieldValue = await client.hget('namespace', 'key', 'field');
+
+// Get all fields (NEW)
+const allFields = await client.hget('namespace', 'key');
+```
+
+### Improved Keyspace Events
+
+The `subscribeToKeyspaceEvents()` method now accepts multiple formats:
+```javascript
+// Single namespace
+await client.subscribeToKeyspaceEvents('namespace');
+
+// Multiple namespaces (NEW)
+await client.subscribeToKeyspaceEvents(['namespace1', 'namespace2']);
+```
+
+## Performance and Monitoring
 
 - `getPerformanceStats()` - Get performance statistics and cache metrics.
 - `resetPerformanceStats()` - Reset performance counters.

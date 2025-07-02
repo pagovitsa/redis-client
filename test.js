@@ -40,6 +40,8 @@ try {
         'deleteKey',
         'checkKey',
         'getNamespaceSize',
+        'getNamespaceSnapshot',
+        'getNamespaceStringValues',
         'subscribeToKeyspaceEvents',
         'createPipeline',
         'destroy',

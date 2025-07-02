@@ -425,22 +425,129 @@ class RedisClient extends EventEmitter {
 
     /**
      * Get a complete snapshot of all keys and values from a Redis namespace
+     * Handles different Redis data types (strings, hashes, lists, sets, sorted sets)
      * @param {string} namespace - The namespace to retrieve (e.g., 'pair', 'block')
      * @param {number} batchSize - Batch size for bulk operations (default: 100)
      * @returns {Promise<Object>} - Object containing all key-value pairs from the namespace
      */
     async getNamespaceSnapshot(namespace, batchSize = 100) {
         try {
+            await this._ensureClientConnected();
+            
             // Get all keys in the namespace
             const keys = await this.getNamespace(namespace);
             
-            // Extract clean keys (remove namespace prefix)
-            const cleanKeys = keys.map(key => key.replace(`${namespace}:`, ''));
+            if (keys.length === 0) {
+                return {};
+            }
             
-            // Use the Redis client's optimized bulk batched operation
-            const values = await this.getBulkBatched(namespace, cleanKeys, batchSize);
+            const result = {};
             
-            return values;
+            // Process keys in batches to avoid overwhelming Redis
+            for (let i = 0; i < keys.length; i += batchSize) {
+                const batch = keys.slice(i, i + batchSize);
+                const pipeline = this.client.multi();
+                
+                // First, get the type of each key
+                for (const key of batch) {
+                    pipeline.type(key);
+                }
+                
+                const typeResults = await pipeline.exec();
+                
+                // Now get values based on type
+                const valuePipeline = this.client.multi();
+                
+                for (let j = 0; j < batch.length; j++) {
+                    const key = batch[j];
+                    const keyType = typeResults[j];
+                    
+                    if (keyType === 'none') {
+                        continue; // Key doesn't exist
+                    }
+                    
+                    switch (keyType) {
+                        case 'string':
+                            valuePipeline.get(key);
+                            break;
+                        case 'hash':
+                            valuePipeline.hGetAll(key);
+                            break;
+                        case 'list':
+                            valuePipeline.lRange(key, 0, -1);
+                            break;
+                        case 'set':
+                            valuePipeline.sMembers(key);
+                            break;
+                        case 'zset':
+                            valuePipeline.zRangeWithScores(key, 0, -1);
+                            break;
+                        default:
+                            // For unknown types, try to get as string
+                            valuePipeline.get(key);
+                            break;
+                    }
+                }
+                
+                const valueResults = await valuePipeline.exec();
+                
+                // Process results
+                let resultIndex = 0;
+                for (let j = 0; j < batch.length; j++) {
+                    const key = batch[j];
+                    const keyType = typeResults[j];
+                    const cleanKey = key.replace(`${namespace}:`, '');
+                    
+                    if (keyType === 'none') {
+                        continue;
+                    }
+                    
+                    const value = valueResults[resultIndex++];
+                    
+                    try {
+                        switch (keyType) {
+                            case 'string':
+                                // Try to decompress and parse if it's our compressed data
+                                try {
+                                    const decompressed = await this._decompress(value);
+                                    const parsed = this._parseJson(decompressed);
+                                    result[cleanKey] = parsed !== false ? parsed : decompressed;
+                                } catch (decompressError) {
+                                    // If decompression fails, store as-is
+                                    result[cleanKey] = value;
+                                }
+                                break;
+                            case 'hash':
+                                result[cleanKey] = value;
+                                break;
+                            case 'list':
+                                result[cleanKey] = value;
+                                break;
+                            case 'set':
+                                result[cleanKey] = value;
+                                break;
+                            case 'zset':
+                                // Convert WITHSCORES result to object
+                                const zsetObj = {};
+                                if (Array.isArray(value)) {
+                                    for (const item of value) {
+                                        zsetObj[item.value] = item.score;
+                                    }
+                                }
+                                result[cleanKey] = zsetObj;
+                                break;
+                            default:
+                                result[cleanKey] = value;
+                                break;
+                        }
+                    } catch (processError) {
+                        console.warn(`[${this.alias}] Error processing key ${key}:`, processError);
+                        result[cleanKey] = value; // Store raw value on error
+                    }
+                }
+            }
+            
+            return result;
         } catch (error) {
             console.error(`[${this.alias}] Error getting namespace snapshot:`, error);
             throw error;
@@ -965,6 +1072,31 @@ class RedisClient extends EventEmitter {
         }
         
         console.log(`[${this.alias}] Cache optimization completed. Sizes: compression=${compressionSize}, decompression=${decompressionSize}, keyFormat=${keyFormatSize}`);
+    }
+
+    /**
+     * Get all string values from a namespace (original behavior)
+     * This method only works with string keys and will skip other data types
+     * @param {string} namespace - The namespace to retrieve
+     * @param {number} batchSize - Batch size for bulk operations (default: 100)
+     * @returns {Promise<Object>} - Object containing all string key-value pairs from the namespace
+     */
+    async getNamespaceStringValues(namespace, batchSize = 100) {
+        try {
+            // Get all keys in the namespace
+            const keys = await this.getNamespace(namespace);
+            
+            // Extract clean keys (remove namespace prefix)
+            const cleanKeys = keys.map(key => key.replace(`${namespace}:`, ''));
+            
+            // Use the Redis client's optimized bulk batched operation for strings only
+            const values = await this.getBulkBatched(namespace, cleanKeys, batchSize);
+            
+            return values;
+        } catch (error) {
+            console.error(`[${this.alias}] Error getting namespace string values:`, error);
+            throw error;
+        }
     }
 }
 
